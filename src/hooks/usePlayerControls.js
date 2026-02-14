@@ -11,6 +11,16 @@ export function usePlayerControls(playerRef) {
 
         if (!playerRef.current) return;
 
+        // Reset if we are resetting (transition)
+        if (phase === 'loading') return;
+
+        // Force high speed during launch
+        if (phase === 'launching') {
+            const body = playerRef.current;
+            body.setLinvel({ x: 50, y: 0, z: 0 }, true); // HYPER SPEED
+            return;
+        }
+
         // Force freeze if paused
         if (phase === 'paused') {
             const body = playerRef.current;

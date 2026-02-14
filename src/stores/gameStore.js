@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 
 export const useGameStore = create((set, get) => ({
-    phase: 'loading', // 'loading', 'ready', 'playing', 'ended'
+    phase: 'loading', // 'loading', 'ready', 'launching', 'playing', 'ended'
+    isBlackout: false, // Controls the iris wipe effect
 
     setPhase: (phase) => {
         const { audio } = get();
@@ -14,6 +15,8 @@ export const useGameStore = create((set, get) => ({
         }
         set({ phase });
     },
+
+    setBlackout: (value) => set({ isBlackout: value }),
 
     physicsParams: {
         jumpForce: 15,

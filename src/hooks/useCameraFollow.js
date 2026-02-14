@@ -18,19 +18,18 @@ export function useCameraFollow(playerRef) {
             if (phase === 'launching' && playerRef.current) {
                 const playerPosition = playerRef.current.translation();
 
-                // Target the exact same starting position as the 'playing' phase to ensure seamless transition
-                // Playing offsets: Camera at (0, 0, 15), LookAt at (3, 0, 0) relative to player
-                const targetPos = new THREE.Vector3(playerPosition.x, playerPosition.y, playerPosition.z + 15);
-                const targetLook = new THREE.Vector3(playerPosition.x + 3, playerPosition.y, 0);
+                // Dramatic Launch Zoom: Move camera close behind the engine
+                // Playing view is side (z+15), Launch view is rear-chase (z+4, x-3)
+                const targetPos = new THREE.Vector3(playerPosition.x - 3, playerPosition.y + 0.5, playerPosition.z + 4);
+                const targetLook = new THREE.Vector3(playerPosition.x + 20, playerPosition.y, 0);
 
-                // Smoothly define launch transition speed
-                const lerpSpeed = 3 * delta;
+                // Smoothly define launch transition speed (Faster for impact)
+                const lerpSpeed = 4 * delta;
 
-                // Move camera to start position
+                // Move camera to chase position
                 state.camera.position.lerp(targetPos, lerpSpeed);
 
-                // Smoothly adjust look target
-                // If this is the first frame of launch, smoothedTarget might be at (0,0,0) from orbit
+                // Look ahead
                 smoothedTarget.lerp(targetLook, lerpSpeed);
                 state.camera.lookAt(smoothedTarget);
 

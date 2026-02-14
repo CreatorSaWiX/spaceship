@@ -33,6 +33,7 @@ export default function PlayerTrail({ playerRef, colorStart = "#00ffff", colorEn
 
     // Audio
     const analyser = useGameStore((state) => state.audio.analyser);
+    const phase = useGameStore((state) => state.phase);
     const dataArray = useMemo(() => new Uint8Array(128), []);
 
     // Simulation
@@ -83,13 +84,23 @@ export default function PlayerTrail({ playerRef, colorStart = "#00ffff", colorEn
         }
 
         // 2. Dynamic Width - High Contrast Pulse
-        const pulse = Math.pow(energy, 3);
-        const targetWidth = 0.2 + pulse * 15.0;
+        let targetWidth;
+        let targetOpacity;
+
+        if (phase === 'launching') {
+            // MAX WIDTH FOR HYPERSPACE EFFECT
+            targetWidth = 7.5;
+            targetOpacity = 1;
+        } else {
+            const pulse = Math.pow(energy, 3);
+            targetWidth = 0.2 + pulse * 15.0;
+            targetOpacity = 0.3 + pulse * 0.7;
+        }
 
         if (Math.abs(targetWidth - lastWidthRef.current) > 0.1) {
             lastWidthRef.current = targetWidth;
             setTrailWidth(targetWidth);
-            setTrailOpacity(0.3 + pulse * 0.7);
+            setTrailOpacity(targetOpacity);
         }
 
         // 3. Update Target Positions

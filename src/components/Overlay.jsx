@@ -31,6 +31,7 @@ const loadingtext = [
 
 export default function Overlay() {
     const phase = useGameStore((state) => state.phase);
+    const isBlackout = useGameStore((state) => state.isBlackout);
     const setAudioContext = useGameStore((state) => state.setAudioContext);
     const setAudioBuffer = useGameStore((state) => state.setAudioBuffer);
     const setPhase = useGameStore((state) => state.setPhase);
@@ -161,34 +162,69 @@ export default function Overlay() {
 
     const handleStart = () => {
         playSound('click');
-        setPhase('launching'); // Trigger camera zoom
-
-        // Wait for camera zoom sequence 
-        setTimeout(() => {
-            startGame(); // This sets phase to 'playing' in store and starts music
-        }, 1200);
+        useGameStore.getState().setBlackout(true); // Ensure it's marked as blacking out
+        setPhase('launching'); // Trigger ship fly-off
+        // Blackout starts via store/Effect in component
     };
 
     return (
         <div className="overlay" style={{
             position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
-            pointerEvents: 'none', // Changed to manage per-element pointer events
+            pointerEvents: 'none',
             display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
             zIndex: 100, overflow: 'hidden',
             fontFamily: '"Inter", sans-serif'
         }}>
-            {/* Now Playing Notification */}
+            {/* Cinematic Iris Wipe Transition (Mask Version) */}
+            <motion.div
+                initial={{
+                    maskImage: 'radial-gradient(circle, transparent 150%, black 150%)',
+                    WebkitMaskImage: 'radial-gradient(circle, transparent 150%, black 150%)'
+                }}
+                animate={
+                    phase === 'launching' ? {
+                        maskImage: 'radial-gradient(circle, transparent 0%, black 0%)',
+                        WebkitMaskImage: 'radial-gradient(circle, transparent 0%, black 0%)',
+                        transition: { duration: 0.8, delay: 0.4, ease: "easeInOut" }
+                    } :
+                        phase === 'playing' ? {
+                            maskImage: isBlackout
+                                ? 'radial-gradient(circle, transparent 0%, black 0%)'
+                                : 'radial-gradient(circle, transparent 150%, black 150%)',
+                            WebkitMaskImage: isBlackout
+                                ? 'radial-gradient(circle, transparent 0%, black 0%)'
+                                : 'radial-gradient(circle, transparent 150%, black 150%)',
+                            transition: { duration: 1.5, ease: "easeInOut", delay: 0.2 }
+                        } :
+                            {
+                                maskImage: 'radial-gradient(circle, transparent 150%, black 150%)',
+                                WebkitMaskImage: 'radial-gradient(circle, transparent 150%, black 150%)'
+                            }
+                }
+                style={{
+                    position: 'fixed',
+                    inset: 0,
+                    background: '#000',
+                    zIndex: 90,
+                    pointerEvents: (phase === 'launching' || (phase === 'playing' && isBlackout)) ? 'auto' : 'none',
+                    WebkitMaskImage: 'radial-gradient(circle, transparent 150%, black 150%)', // Initial fallback for Safari
+                }}
+            >
+            </motion.div>
+
+            {/* Now Playing Notification (Z: 100) */}
             <AnimatePresence>
-                {phase === 'playing' && (
+                {(phase === 'playing' || phase === 'launching') && (
                     <motion.div
                         initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: 20 }}
-                        transition={{ delay: 2, duration: 0.8 }}
+                        transition={{ delay: 0.5, duration: 0.8 }}
                         style={{
                             position: 'absolute', bottom: '40px', right: '40px',
                             display: 'flex', alignItems: 'center', gap: '16px',
-                            pointerEvents: 'none'
+                            pointerEvents: 'none',
+                            zIndex: 100 // Ensure on top of black
                         }}
                     >
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
