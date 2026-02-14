@@ -1,0 +1,32 @@
+# Dependencies and build outputs
+node_modules/
+build/
+dist/
+.vercel/        # Si uses Vercel i aquesta carpeta es genera localment
+.env
+.env.local
+
+# Operating System files
+.DS_Store
+Thumbs.db
+
+# IDE configuration files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Log files
+*.log
+npm-debug.log*
+
+# Core dumps and crash files
+core
+core.*
+*.dmp
+
+# Personal history files (per assegurar-te que no surt el .bash_history)
+.bash_history
+.zsh_history
+.history
+.vercel
