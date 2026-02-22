@@ -37,6 +37,7 @@ const Player = forwardRef((props, ref) => {
             restitution={0}
             friction={0}
             canSleep={false}
+            enabledRotations={[false, false, false]} // Lock physics rotations completely!
             userData={{ tag: 'player' }}
         >
             <CuboidCollider args={[1, 0.3, 0.4]} position={[-0.1, -0.2, 0]} />

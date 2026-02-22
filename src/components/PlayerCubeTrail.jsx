@@ -91,17 +91,19 @@ export default function PlayerTrail({ playerRef, colorStart = "#00ffff", colorEn
             // MAX WIDTH FOR HYPERSPACE EFFECT
             targetWidth = 7.5;
             targetOpacity = 1;
+        } else if (phase === 'ended') {
+            targetWidth = 0;
+            targetOpacity = 0;
         } else {
             const pulse = Math.pow(energy, 3);
-            targetWidth = 0.2 + pulse * 15.0;
+            targetWidth = 0.6 + pulse * 15.0; // Increased min size to prevent "cut" effect
             targetOpacity = 0.3 + pulse * 0.7;
         }
 
-        if (Math.abs(targetWidth - lastWidthRef.current) > 0.1) {
-            lastWidthRef.current = targetWidth;
-            setTrailWidth(targetWidth);
-            setTrailOpacity(targetOpacity);
-        }
+        // Smooth width transition to avoid jagged geometry
+        lastWidthRef.current = THREE.MathUtils.lerp(lastWidthRef.current, targetWidth, 0.1);
+        setTrailWidth(lastWidthRef.current);
+        setTrailOpacity(targetOpacity);
 
         // 3. Update Target Positions
         const translation = playerRef.current.translation();
@@ -159,8 +161,10 @@ export default function PlayerTrail({ playerRef, colorStart = "#00ffff", colorEn
             }
         };
 
-        handleParticles(vLeft, lastPosLeft);
-        handleParticles(vRight, lastPosRight);
+        if (phase !== 'ended') {
+            handleParticles(vLeft, lastPosLeft);
+            handleParticles(vRight, lastPosRight);
+        }
 
         // 5. Update Particles
         for (let i = trailElements.length - 1; i >= 0; i--) {
@@ -204,6 +208,7 @@ export default function PlayerTrail({ playerRef, colorStart = "#00ffff", colorEn
                 depthWrite={false}
                 blending={THREE.AdditiveBlending}
                 interval={1} // Force update every frame
+                renderOrder={1}
             />
 
             <Trail
@@ -219,6 +224,35 @@ export default function PlayerTrail({ playerRef, colorStart = "#00ffff", colorEn
                 depthWrite={false}
                 blending={THREE.AdditiveBlending}
                 interval={1}
+                renderOrder={1}
+            />
+
+            {/* NEON CORE EFFECT (White Center) */}
+            <Trail
+                width={Math.max(0.4, trailWidth * 0.3)}
+                length={12}
+                attenuation={(t) => t}
+                target={targetRefLeft}
+                color={'#ffffff'}
+                transparent
+                opacity={trailOpacity}
+                depthWrite={false}
+                blending={THREE.AdditiveBlending}
+                interval={1}
+                renderOrder={2}
+            />
+            <Trail
+                width={Math.max(0.4, trailWidth * 0.3)}
+                length={12}
+                attenuation={(t) => t}
+                target={targetRefRight}
+                color={'#ffffff'}
+                transparent
+                opacity={trailOpacity}
+                depthWrite={false}
+                blending={THREE.AdditiveBlending}
+                interval={1}
+                renderOrder={2}
             />
         </>
     );

@@ -1,5 +1,6 @@
 import { CuboidCollider } from '@react-three/rapier';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useGameStore } from '../../stores/gameStore.js';
 
 /**
  * ZoneTrigger optimitzat utilitzant Sensors de Rapier.
@@ -17,6 +18,14 @@ export default function ZoneTrigger({
     debug = true
 }) {
     const [triggered, setTriggered] = useState(false);
+    const phase = useGameStore((state) => state.phase);
+
+    // Reset trigger state on game restart
+    useEffect(() => {
+        if (phase === 'ready' || phase === 'loading' || phase === 'launching') {
+            setTriggered(false);
+        }
+    }, [phase]);
 
     // Gestor de l'esdeveniment d'entrada
     const handleEnter = ({ other }) => {

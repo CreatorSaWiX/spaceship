@@ -43,6 +43,28 @@ export default function Overlay() {
     const [showControls, setShowControls] = useState(false);
 
     const [audioContext, setLocalAudioContext] = useState(null);
+    const bgmSourceRef = useRef(null);
+    const bgmFilterRef = useRef(null);
+    const bgmGainRef = useRef(null);
+    const bgmBufferRef = useRef(null);
+
+    // Initialize state based on current dimensions to avoid flash
+    const [isPortrait, setIsPortrait] = useState(() => typeof window !== 'undefined' ? window.innerHeight > window.innerWidth : false);
+    const [hasLogicStarted, setHasLogicStarted] = useState(() => typeof window !== 'undefined' ? window.innerWidth >= window.innerHeight : false);
+
+    // Detect orientation
+    useEffect(() => {
+        const checkOrientation = () => {
+            const portrait = window.innerHeight > window.innerWidth;
+            setIsPortrait(portrait);
+            if (!portrait) {
+                setHasLogicStarted(true);
+            }
+        };
+        checkOrientation();
+        window.addEventListener('resize', checkOrientation);
+        return () => window.removeEventListener('resize', checkOrientation);
+    }, []);
 
     // Audio Init
     useEffect(() => {
@@ -119,6 +141,7 @@ export default function Overlay() {
     useEffect(() => {
         const loadAudio = async () => {
             if (!audioContext) return;
+            if (!hasLogicStarted) return;
 
             try {
                 // Start loading animation
@@ -143,6 +166,16 @@ export default function Overlay() {
 
                 setAudioBuffer(decodedAudio);
 
+                // Load BGM
+                try {
+                    const bgmResponse = await fetch('/bgm.mp3');
+                    const bgmArrayBuffer = await bgmResponse.arrayBuffer();
+                    const bgmDecoded = await audioContext.decodeAudioData(bgmArrayBuffer);
+                    bgmBufferRef.current = bgmDecoded;
+                } catch (e) {
+                    console.warn("Failed to load /bgm.mp3", e);
+                }
+
                 // Complete loading
                 clearInterval(progressInterval);
                 setProgress(100);
@@ -158,7 +191,93 @@ export default function Overlay() {
         if (phase === 'loading' && audioContext) {
             loadAudio();
         }
+    }, [phase, audioContext, hasLogicStarted]);
+
+    // BGM playback logic
+    useEffect(() => {
+        if (!audioContext || !bgmBufferRef.current) return;
+
+        if (phase === 'ready') {
+            if (bgmSourceRef.current) {
+                // If it's already playing (e.g., returning to home screen)
+                const now = audioContext.currentTime;
+                bgmFilterRef.current.frequency.cancelScheduledValues(now);
+                bgmSourceRef.current.playbackRate.cancelScheduledValues(now);
+                bgmGainRef.current.gain.cancelScheduledValues(now);
+
+                bgmFilterRef.current.frequency.setValueAtTime(bgmFilterRef.current.frequency.value || 20000, now);
+                bgmFilterRef.current.frequency.linearRampToValueAtTime(20000, now + 1);
+
+                bgmSourceRef.current.playbackRate.setValueAtTime(bgmSourceRef.current.playbackRate.value || 1, now);
+                bgmSourceRef.current.playbackRate.linearRampToValueAtTime(1, now + 1);
+
+                bgmGainRef.current.gain.setValueAtTime(bgmGainRef.current.gain.value || 0.5, now);
+                bgmGainRef.current.gain.linearRampToValueAtTime(0.5, now + 1);
+                return;
+            }
+
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+
+            const source = audioContext.createBufferSource();
+            source.buffer = bgmBufferRef.current;
+            source.loop = true;
+
+            const filter = audioContext.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.value = 20000;
+
+            const gain = audioContext.createGain();
+            gain.gain.value = 0;
+            // Linear fade in
+            gain.gain.linearRampToValueAtTime(0.5, audioContext.currentTime + 2);
+
+            source.connect(filter);
+            filter.connect(gain);
+            gain.connect(audioContext.destination);
+
+            source.start(0);
+
+            bgmSourceRef.current = source;
+            bgmFilterRef.current = filter;
+            bgmGainRef.current = gain;
+        } else if (phase === 'launching' || phase === 'playing') {
+            // Apply underwater / lowpitch effect
+            if (bgmFilterRef.current && bgmSourceRef.current && bgmGainRef.current) {
+                const now = audioContext.currentTime;
+
+                // Cancel previous values
+                bgmFilterRef.current.frequency.cancelScheduledValues(now);
+                bgmSourceRef.current.playbackRate.cancelScheduledValues(now);
+                bgmGainRef.current.gain.cancelScheduledValues(now);
+
+                // Transition to underwater (low frequency cutoff)
+                bgmFilterRef.current.frequency.setValueAtTime(bgmFilterRef.current.frequency.value, now);
+                bgmFilterRef.current.frequency.exponentialRampToValueAtTime(300, now + 1.5);
+
+                // Transition pitch down
+                bgmSourceRef.current.playbackRate.setValueAtTime(bgmSourceRef.current.playbackRate.value, now);
+                bgmSourceRef.current.playbackRate.linearRampToValueAtTime(0.5, now + 2);
+
+                // Fade out
+                bgmGainRef.current.gain.setValueAtTime(bgmGainRef.current.gain.value, now);
+                bgmGainRef.current.gain.linearRampToValueAtTime(0, now + 3);
+            }
+        } else if (phase === 'ended') {
+            if (bgmGainRef.current) {
+                const now = audioContext.currentTime;
+                bgmGainRef.current.gain.cancelScheduledValues(now);
+                bgmGainRef.current.gain.setValueAtTime(bgmGainRef.current.gain.value, now);
+                bgmGainRef.current.gain.linearRampToValueAtTime(0, now + 1);
+            }
+        }
     }, [phase, audioContext]);
+
+    // Resum de lògica visual:
+    // - Launching: Transició ràpida 
+    // - Playing: Gestió via CameraFadeMask (R3F)
+    // - Altres: Tancat
 
     const handleStart = () => {
         playSound('click');
@@ -175,7 +294,7 @@ export default function Overlay() {
             zIndex: 100, overflow: 'hidden',
             fontFamily: '"Inter", sans-serif'
         }}>
-            {/* Cinematic Iris Wipe Transition (Mask Version) */}
+            {/* Cinematic Iris Wipe Transition (Mask Version) - Ara només per la intro inicial (Launching/Loading) */}
             <motion.div
                 initial={{
                     maskImage: 'radial-gradient(circle, transparent 150%, black 150%)',
@@ -187,27 +306,27 @@ export default function Overlay() {
                         WebkitMaskImage: 'radial-gradient(circle, transparent 0%, black 0%)',
                         transition: { duration: 0.8, delay: 0.4, ease: "easeInOut" }
                     } :
-                        phase === 'playing' ? {
-                            maskImage: isBlackout
-                                ? 'radial-gradient(circle, transparent 0%, black 0%)'
-                                : 'radial-gradient(circle, transparent 150%, black 150%)',
-                            WebkitMaskImage: isBlackout
-                                ? 'radial-gradient(circle, transparent 0%, black 0%)'
-                                : 'radial-gradient(circle, transparent 150%, black 150%)',
-                            transition: { duration: 1.5, ease: "easeInOut", delay: 0.2 }
-                        } :
-                            {
-                                maskImage: 'radial-gradient(circle, transparent 150%, black 150%)',
-                                WebkitMaskImage: 'radial-gradient(circle, transparent 150%, black 150%)'
+                        phase === 'loading' || phase === 'ready' || phase === 'init' ? {
+                            maskImage: 'radial-gradient(circle, transparent 150%, black 150%)',
+                            WebkitMaskImage: 'radial-gradient(circle, transparent 150%, black 150%)'
+                        } : {
+                            // En playing, mantenim la màscara tancada (tot negre) mentre fem fade-out de l'element
+                            maskImage: 'radial-gradient(circle, transparent 0%, black 0%)',
+                            WebkitMaskImage: 'radial-gradient(circle, transparent 0%, black 0%)',
+                            opacity: 0,
+                            transition: {
+                                maskImage: { duration: 0 },
+                                WebkitMaskImage: { duration: 0 },
+                                opacity: { duration: 0.5, delay: 2.1 } // 2.1s per donar un petit marge extra al 3D mask (que espera 2.0s)
                             }
+                        }
                 }
                 style={{
-                    position: 'fixed',
+                    position: 'absolute',
                     inset: 0,
                     background: '#000',
-                    zIndex: 90,
-                    pointerEvents: (phase === 'launching' || (phase === 'playing' && isBlackout)) ? 'auto' : 'none',
-                    WebkitMaskImage: 'radial-gradient(circle, transparent 150%, black 150%)', // Initial fallback for Safari
+                    zIndex: 1, // Z-index baix perquè el contingut (botons, títol) estigui a sobre (suposant que tenen >1)
+                    pointerEvents: (phase === 'launching' || phase === 'ready' || phase === 'loading' || phase === 'init') ? 'auto' : 'none',
                 }}
             >
             </motion.div>
@@ -340,6 +459,90 @@ export default function Overlay() {
             </AnimatePresence>
 
             <AnimatePresence mode="wait">
+                {phase === 'init' && (
+                    <motion.div
+                        key="init"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0, transition: { duration: 1.2, ease: "easeInOut" } }}
+                        style={{
+                            position: 'absolute', inset: 0, zIndex: 200,
+                            background: 'radial-gradient(circle at center, #111 0%, #000 70%)',
+                            display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '50px',
+                            pointerEvents: 'auto'
+                        }}
+                    >
+                        <motion.div
+                            initial={{ y: 40, opacity: 0, filter: 'blur(10px)' }}
+                            animate={{ y: 0, opacity: 1, filter: 'blur(0px)' }}
+                            transition={{ delay: 0.4, duration: 1.4, ease: [0.16, 1, 0.3, 1] }}
+                            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '32px' }}
+                        >
+                            <motion.svg
+                                initial={{ filter: 'drop-shadow(0px 0px 0px rgba(255, 255, 255, 0))' }}
+                                animate={{ filter: 'drop-shadow(0px 0px 20px rgba(255, 255, 255, 0.4))' }}
+                                transition={{ duration: 2.5, repeat: Infinity, repeatType: 'reverse', ease: "easeInOut" }}
+                                width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" style={{ overflow: 'visible' }}
+                            >
+                                <path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3" />
+                            </motion.svg>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                                <p className="font-body" style={{ fontSize: '14px', letterSpacing: '2px', textTransform: 'lowercase', color: 'rgba(255,255,255,0.6)', margin: 0 }}>
+                                    use headphones for better experience
+                                </p>
+                            </div>
+                        </motion.div>
+
+                        <motion.button
+                            initial={{
+                                opacity: 0, y: 10,
+                                backgroundColor: 'rgba(255,255,255,0)',
+                                color: 'rgba(255,255,255,0.6)',
+                                borderColor: 'rgba(255,255,255,0.2)'
+                            }}
+                            animate={{
+                                opacity: 1, y: 0,
+                                backgroundColor: 'rgba(255,255,255,0)',
+                                color: 'rgba(255,255,255,0.6)',
+                                borderColor: 'rgba(255,255,255,0.2)'
+                            }}
+                            whileHover={{
+                                scale: 1.03,
+                                backgroundColor: 'rgba(255,255,255,1)',
+                                borderColor: 'rgba(255,255,255,1)',
+                                color: 'rgba(0,0,0,1)',
+                                boxShadow: '0px 0px 30px rgba(255,255,255,0.2)'
+                            }}
+                            whileTap={{
+                                scale: 0.96,
+                                backgroundColor: 'rgba(255,255,255,0.8)',
+                                borderColor: 'rgba(255,255,255,0.8)',
+                                color: 'rgba(0,0,0,1)',
+                                boxShadow: '0px 0px 0px rgba(255,255,255,0)'
+                            }}
+                            transition={{
+                                opacity: { delay: 1.2, duration: 1 },
+                                y: { delay: 1.2, duration: 0.8 },
+                                default: { duration: 0.25, ease: "easeOut" }
+                            }}
+                            onClick={() => {
+                                playSound('click');
+                                // Endarrereix la desaparició 150ms per veure i sentir el Tap del botó
+                                setTimeout(() => setPhase('loading'), 150);
+                            }}
+                            onMouseEnter={() => playSound('hover')}
+                            className="font-display"
+                            style={{
+                                padding: '16px 48px', borderRadius: '0px', fontSize: '10px', letterSpacing: '4px', textTransform: 'uppercase',
+                                borderStyle: 'solid', borderWidth: '1px', cursor: 'pointer',
+                                outline: 'none'
+                            }}
+                        >
+                            Acknowledge
+                        </motion.button>
+                    </motion.div>
+                )}
+
                 {phase === 'loading' && (
                     <motion.div
                         key="loading"
@@ -387,9 +590,109 @@ export default function Overlay() {
                     </motion.div>
                 )}
 
+                {phase === 'ended' && (
+                    <motion.div
+                        key="ended"
+                        className="center-panel"
+                        style={{ textAlign: 'center', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center' }}
+                    >
+                        {/* Status Badge */}
+                        <motion.div
+                            initial={{ opacity: 0, y: -20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.2 }}
+                            className="glass"
+                            style={{
+                                display: 'inline-flex', alignItems: 'center', gap: '8px',
+                                padding: '8px 20px', borderRadius: '4px', marginBottom: '40px',
+                                border: '1px solid rgba(16, 185, 129, 0.4)', // Green
+                                background: 'rgba(6, 78, 59, 0.6)'
+                            }}
+                        >
+                            <span className="animate-pulse" style={{ width: '6px', height: '6px', background: '#34d399', borderRadius: '50%', boxShadow: '0 0 8px rgba(52, 211, 153, 0.8)' }} />
+                            <span className="font-body" style={{ fontSize: '11px', fontWeight: 600, color: '#d1fae5', letterSpacing: '3px' }}>
+                                MISSION SUCCESS
+                            </span>
+                        </motion.div>
+
+                        {/* Title Staggered */}
+                        <motion.h1
+                            variants={containerVariants}
+                            initial="hidden"
+                            animate="visible"
+                            exit={{ opacity: 0, scale: 1.1 }}
+                            className="font-display"
+                            style={{
+                                fontSize: 'clamp(3rem, 10vw, 7rem)', fontWeight: 800, margin: '0 0 20px 0',
+                                lineHeight: 0.9, letterSpacing: '-0.05em',
+                                display: 'flex', gap: '2px', justifyContent: 'center', flexWrap: 'wrap'
+                            }}
+                        >
+                            <span className="text-gradient" style={{ cursor: 'default' }}>
+                                {"COMPLETED".split("").map((char, index) => (
+                                    <motion.span key={index} variants={letterVariants} style={{ display: 'inline-block' }}>
+                                        {char}
+                                    </motion.span>
+                                ))}
+                            </span>
+                        </motion.h1>
+
+                        <motion.p
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ delay: 0.8 }}
+                            style={{
+                                fontSize: '14px', color: 'rgba(255,255,255,0.6)', letterSpacing: '8px', marginBottom: '80px', textTransform: 'uppercase',
+                                borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px', width: '100%',
+                                fontFamily: '"Inter", sans-serif'
+                            }}
+                        >
+                            Sector Secured
+                        </motion.p>
+
+                        {/* Actions */}
+                        <motion.div
+                            initial={{ opacity: 0, y: 40 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 1, type: "spring" }}
+                            style={{
+                                display: 'flex', flexDirection: 'column', gap: '24px', alignItems: 'center',
+                                pointerEvents: 'auto' // Re-enable clicks
+                            }}
+                        >
+                            <button
+                                onClick={() => { playSound('click'); useGameStore.getState().resetGame('launching'); }}
+                                onMouseEnter={() => playSound('hover')}
+                                className="btn-primary"
+                                style={{
+                                    padding: '24px 80px', fontSize: '16px', borderRadius: '2px',
+                                    border: '1px solid rgba(255,255,255,0.2)',
+                                    background: 'rgba(255,255,255,0.05)'
+                                }}
+                            >
+                                Replay
+                            </button>
+
+                            <button
+                                onMouseEnter={() => playSound('hover')}
+                                onClick={() => { playSound('click'); useGameStore.getState().resetGame('ready'); }}
+                                className="btn-secondary"
+                                style={{
+                                    padding: '12px 30px', borderRadius: '2px', fontSize: '11px', letterSpacing: '2px', textTransform: 'uppercase',
+                                    border: 'none', borderBottom: '1px solid rgba(255,255,255,0.2)',
+                                    background: 'transparent', color: '#fff', cursor: 'pointer'
+                                }}
+                            >
+                                Home
+                            </button>
+                        </motion.div>
+                    </motion.div>
+                )}
+
                 {phase === 'ready' && !showControls && (
                     <motion.div
                         key="ready"
+                        className="center-panel"
                         style={{ textAlign: 'center', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center' }}
                     >
                         {/* Status Badge */}
@@ -495,6 +798,42 @@ export default function Overlay() {
                         style={{ position: 'absolute', bottom: '40px', width: '100%', textAlign: 'center', color: 'rgba(255,255,255,0.2)', fontSize: '10px', letterSpacing: '2px' }}
                     >
                         DESIGNED BY CREATORSAWIX
+                    </motion.div>
+                )}
+            </AnimatePresence>
+            {/* Orientation Warning (Mobile) */}
+            <AnimatePresence>
+                {isPortrait && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        style={{
+                            position: 'fixed', inset: 0, zIndex: 99999,
+                            background: '#0f172a',
+                            display: 'flex', flexDirection: 'column',
+                            justifyContent: 'center', alignItems: 'center',
+                            textAlign: 'center', padding: '40px'
+                        }}
+                    >
+                        <div style={{
+                            fontSize: '40px', marginBottom: '20px',
+                            animation: 'spin 2s infinite ease-in-out'
+                        }}>
+                            ↻
+                        </div>
+                        <h2 className="font-display" style={{
+                            fontSize: '24px', color: '#fff',
+                            letterSpacing: '4px', marginBottom: '10px'
+                        }}>
+                            ROTATE DEVICE
+                        </h2>
+                        <p className="font-body" style={{
+                            fontSize: '12px', color: 'rgba(255,255,255,0.5)',
+                            maxWidth: '300px'
+                        }}>
+                            For the best immersive experience, please use landscape mode.
+                        </p>
                     </motion.div>
                 )}
             </AnimatePresence>

@@ -10,6 +10,13 @@ body,
     left: 0;
     width: 100%;
     height: 100%;
+
+    /* Mobile Optimization */
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: none;
+    overflow: hidden;
 }
 
 .global-bg {
@@ -86,20 +93,6 @@ body,
     background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.03), transparent);
     transform: skewX(-25deg);
     animation: shine 6s infinite;
-}
-
-@keyframes shine {
-    0% {
-        transform: translateX(-100%) skewX(-25deg);
-    }
-
-    20% {
-        transform: translateX(100%) skewX(-25deg);
-    }
-
-    100% {
-        transform: translateX(100%) skewX(-25deg);
-    }
 }
 
 /* Button Styles - Refined */
@@ -188,7 +181,6 @@ body,
     filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.3));
 }
 
-/* Glitch Effect Keyframes (Subtle) */
 @keyframes glitch-skew {
     0% {
         transform: skew(0deg);
@@ -217,4 +209,116 @@ body,
 
 .hover-glitch:hover {
     animation: glitch-skew 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both infinite;
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes shine {
+    0% {
+        transform: translateX(-100%) skewX(-25deg);
+    }
+
+    20% {
+        transform: translateX(100%) skewX(-25deg);
+    }
+
+    100% {
+        transform: translateX(100%) skewX(-25deg);
+    }
+}
+
+/* 
+   -------------------------------------------------
+   MOBILE LANDSCAPE OPTIMIZATION (COMPACT MODE)
+   -------------------------------------------------
+   NOTE: Keep max-height at 600px or 500px to cover mobile devices.
+   200px is too small and will disable this fix on your phone!
+*/
+@media (max-height: 200px) and (orientation: landscape) {
+
+    /* 1. Center the panel perfectly using flex */
+    html body .center-panel {
+        visibility: visible !important;
+        position: fixed !important;
+        /* Fixed ensures it stays on screen */
+        top: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        transform: none !important;
+        /* Reset generic transforms */
+
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: center !important;
+        align-items: center !important;
+        gap: 15px !important;
+
+        padding: 0 !important;
+        margin: 0 !important;
+        opacity: 1 !important;
+        background: transparent !important;
+    }
+
+    /* 2. SCALE DOWN TITLE */
+    html body h1 {
+        position: static !important;
+        /* Letting flex handle generic positioning */
+        transform: none !important;
+        font-size: 8vh !important;
+        /* Responsive to height, e.g. 30-40px */
+        line-height: 1.1 !important;
+        margin: 0 !important;
+        padding: 0 20px !important;
+        /* Prevent edge touching */
+        width: auto !important;
+        text-align: center !important;
+        display: flex !important;
+        justify-content: center !important;
+    }
+
+    /* Force visibility and solid color on title chars */
+    html body h1 * {
+        opacity: 1 !important;
+        transform: none !important;
+        visibility: visible !important;
+        background: none !important;
+        -webkit-text-fill-color: #ffffff !important;
+        color: #ffffff !important;
+        display: inline-block !important;
+        /* Ensure they flow together */
+    }
+
+    /* 3. Hide Clutter (Subtitle, Badge, Footer) */
+    html body .glass,
+    /* Immersive badge */
+    html body p {
+        /* Subtitle */
+        display: none !important;
+    }
+
+    /* 4. COMPACT BUTTON */
+    html body .btn-primary {
+        position: static !important;
+        transform: none !important;
+        margin: 0 !important;
+        padding: 8px 30px !important;
+        font-size: 12px !important;
+        letter-spacing: 2px !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+    }
+
+    /* 5. Minimal controls button (hidden for strict compactness) */
+    html body .btn-secondary {
+        display: none !important;
+    }
 }

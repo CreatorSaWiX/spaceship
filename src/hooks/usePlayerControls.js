@@ -1,10 +1,30 @@
 import { useKeyboardControls } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+import { useState, useEffect } from 'react';
 import { useGameStore } from '../stores/gameStore.js';
 
 export function usePlayerControls(playerRef) {
     const [, get] = useKeyboardControls();
+    const [isTouchJump, setIsTouchJump] = useState(false);
+
+    // Add Touch/Mouse listeners for universal input
+    useEffect(() => {
+        const handleDown = (e) => setIsTouchJump(true);
+        const handleUp = () => setIsTouchJump(false);
+
+        window.addEventListener('mousedown', handleDown);
+        window.addEventListener('mouseup', handleUp);
+        window.addEventListener('touchstart', handleDown);
+        window.addEventListener('touchend', handleUp);
+
+        return () => {
+            window.removeEventListener('mousedown', handleDown);
+            window.removeEventListener('mouseup', handleUp);
+            window.removeEventListener('touchstart', handleDown);
+            window.removeEventListener('touchend', handleUp);
+        };
+    }, []);
 
     useFrame((state, delta) => {
         const { phase, physicsParams } = useGameStore.getState();
@@ -29,9 +49,43 @@ export function usePlayerControls(playerRef) {
             return;
         }
 
+        // Cinematic End Sequence (Autopilot / Hover)
+        if (phase === 'ended') {
+            const body = playerRef.current;
+            const currentVel = body.linvel();
+            const time = state.clock.getElapsedTime();
+
+            // 1. Slow down forward speed (Friction)
+            const targetX = 0;
+            // 2. Gentle hover motion
+            const hoverY = Math.sin(time * 1.5) * 0.5;
+
+            body.setLinvel({
+                x: THREE.MathUtils.lerp(currentVel.x, targetX, 2 * delta),
+                y: THREE.MathUtils.lerp(currentVel.y, hoverY, 2 * delta),
+                z: 0
+            }, true);
+
+            // 3. Level out rotation
+            body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+
+            // Softly rotate back to neutral
+            const q = body.rotation();
+            const currentQ = new THREE.Quaternion(q.x, q.y, q.z, q.w);
+            const targetQ = new THREE.Quaternion(0, 0, 0, 1); // Identity (Flat)
+
+            // Slerp to flat
+            currentQ.slerp(targetQ, 2 * delta);
+            body.setRotation(currentQ, true);
+
+            return;
+        }
+
         if (phase !== 'playing') return;
 
         const { jump } = get();
+        const isJumping = jump || isTouchJump;
+
         const body = playerRef.current;
         const currentTranslation = body.translation();
 
@@ -45,7 +99,7 @@ export function usePlayerControls(playerRef) {
         const handling = physicsParams.handling || 4;
 
         // 1. Determine Target Velocity based on Input
-        const targetYVelocity = jump ? speed : -speed;
+        const targetYVelocity = isJumping ? speed : -speed;
 
         // 2. Smoothly interpolate current velocity towards target (this creates the curve)
         newYVelocity = THREE.MathUtils.lerp(
@@ -76,10 +130,15 @@ export function usePlayerControls(playerRef) {
         // Lower lerp speed for smoother, longer rotation (less abrupt)
         currentEuler.z = THREE.MathUtils.lerp(currentEuler.z, targetRotationZ, 6 * delta);
 
+        // LOCK ROTATIONS: X (Pitch) and Y (Yaw) must strictly be 0 at all times.
+        // We only want the ship to Roll (Z) slightly when moving up or down.
         currentEuler.x = 0;
         currentEuler.y = 0;
 
         body.setRotation(new THREE.Quaternion().setFromEuler(currentEuler), true);
+
+        // KILL PHYSICS SPIN: Prevent Rapier from accumulating physics-based rotation causing zig-zags
+        body.setAngvel({ x: 0, y: 0, z: 0 }, true);
 
         if (Math.abs(currentTranslation.z) > 0.05) {
             body.setTranslation({ x: currentTranslation.x, y: currentTranslation.y, z: 0 }, true);
