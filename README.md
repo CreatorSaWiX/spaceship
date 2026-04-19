@@ -1,4 +1,12 @@
+# Spaceship
+
 This project is an engineering exploration into high-fidelity 3D graphics within the browser. The primary objective was to achieve near-native performance (60 FPS / 16.6ms frame budget) while managing complex geometry and real-time physics.
+
+<p align="center">
+  <img src="public/screenshot.png" alt="Technical Demo" width="600">
+  <br>
+  <em>Technical demonstration of real-time reflections and geometry instancing</em>
+</p>
 
 ### Core Architectural Features:
 - **Geometry Instancing:** Implemented `InstancedMesh` logic to handle 345 geometric objects while reducing the overhead to only **17 draw calls**, minimizing CPU-to-GPU communication bottlenecks.
